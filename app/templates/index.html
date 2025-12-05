@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+    <div class="col-md-7">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">📅 Запис на прийом (Слоти по 20 хв)</div>
+            <div class="card-body">
+                <form id="bookingForm">
+                    <div class="row mb-3">
+                        <div class="col-md-4"><label>ID Пацієнта:</label><input type="number" class="form-control" id="patientId" required placeholder="ID"></div>
+                        <div class="col-md-8"><label>Скарги:</label><input type="text" class="form-control" id="appSymptoms" placeholder="Що турбує?"></div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6"><label>Лікар:</label><select class="form-select" id="doctorSelect" required onchange="loadSlots()"></select></div>
+                        <div class="col-md-6"><label>Дата:</label><input type="date" class="form-control" id="dateSelect" required onchange="loadSlots()"></div>
+                    </div>
+                    <div class="mb-3"><label class="form-label fw-bold">Доступні слоти:</label><div id="slotsContainer" class="d-flex flex-wrap gap-2"><div class="text-muted small">Оберіть лікаря та дату...</div></div><input type="hidden" id="selectedTime" required></div>
+                    <button type="submit" class="btn btn-success w-100" id="submitBtn" disabled>Записатися</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">Новий пацієнт</div>
+            <div class="card-body">
+                <div id="successBox" class="alert alert-success text-center" style="display: none;"><h5>✅ Успіх!</h5><p class="mb-0">Ваш ID:</p><h2 class="fw-bold" id="newPatientId"></h2></div>
+                <form id="patientForm">
+                    <input type="text" class="form-control mb-2" id="pName" placeholder="Ім'я" required>
+                    <input type="text" class="form-control mb-2" id="pLast" placeholder="Прізвище" required>
+                    <input type="date" class="form-control mb-2" id="pDob" required>
+                    <input type="text" class="form-control mb-2" id="pPhone" placeholder="Телефон" required>
+                    <button type="submit" class="btn btn-info w-100 text-white fw-bold">Реєстрація</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    const today = new Date();
+    document.getElementById('dateSelect').valueAsDate = today;
+    document.getElementById('dateSelect').min = today.toISOString().split('T')[0];
+
+    async function loadDoctors() {
+        const response = await fetch('/doctors/');
+        const doctors = await response.json();
+        const select = document.getElementById('doctorSelect');
+        doctors.forEach(doc => { const option = document.createElement('option'); option.value = doc.id; option.text = `${doc.first_name} ${doc.last_name} (${doc.specialization})`; select.appendChild(option); });
+        loadSlots();
+    }
+    loadDoctors();
+
+    async function loadSlots() {
+        const docId = document.getElementById('doctorSelect').value;
+        const dateVal = document.getElementById('dateSelect').value;
+        const container = document.getElementById('slotsContainer');
+        const submitBtn = document.getElementById('submitBtn');
+        document.getElementById('selectedTime').value = ''; submitBtn.disabled = true;
+        if (!docId || !dateVal) return;
+        container.innerHTML = 'Завантаження...';
+        const res = await fetch(`/doctors/${docId}/slots?date=${dateVal}`);
+        const slots = await res.json();
+        container.innerHTML = '';
+        if (slots.length === 0) { container.innerHTML = '<div class="alert alert-secondary w-100">Немає слотів.</div>'; return; }
+        
+        const now = new Date();
+        const selectedDate = new Date(dateVal);
+        const isToday = selectedDate.toDateString() === now.toDateString();
+        const currentHours = now.getHours();
+        const currentMinutes = now.getMinutes();
+
+        slots.forEach(slot => {
+            let isPast = false;
+            if (isToday) {
+                const [h, m] = slot.time.split(':').map(Number);
+                if (h < currentHours || (h === currentHours && m < currentMinutes)) isPast = true;
+            }
+            const isAvailable = slot.is_free && !isPast;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = isAvailable ? 'btn btn-outline-success slot-btn' : 'btn btn-secondary disabled slot-btn';
+            btn.innerText = slot.time;
+            if (isAvailable) btn.onclick = () => selectSlot(btn, slot.time);
+            container.appendChild(btn);
+        });
+    }
+
+    function selectSlot(btn, time) {
+        document.querySelectorAll('.slot-btn').forEach(b => { if (!b.classList.contains('disabled')) b.className = 'btn btn-outline-success slot-btn'; });
+        btn.className = 'btn btn-success slot-btn text-white fw-bold';
+        document.getElementById('selectedTime').value = time;
+        document.getElementById('submitBtn').disabled = false;
+    }
+
+    document.getElementById('bookingForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const datePart = document.getElementById('dateSelect').value;
+        const timePart = document.getElementById('selectedTime').value;
+        const fullDateTime = `${datePart}T${timePart}:00`;
+        const data = { patient_id: document.getElementById('patientId').value, doctor_id: document.getElementById('doctorSelect').value, date_time: fullDateTime, symptoms: document.getElementById('appSymptoms').value };
+        const res = await fetch('/appointments/', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+        if (res.ok) { showToast('✅ Записано на ' + timePart); loadSlots(); }
+        else { const err = await res.json(); showToast('❌ ' + err.detail, 'danger'); }
+    };
+    
+    document.getElementById('patientForm').onsubmit = async (e) => {
+        e.preventDefault();
+        document.getElementById('successBox').style.display = 'none';
+        const data = { first_name: document.getElementById('pName').value, last_name: document.getElementById('pLast').value, date_of_birth: document.getElementById('pDob').value, phone_number: document.getElementById('pPhone').value };
+        const res = await fetch('/patients/', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+        if (res.ok) { const p = await res.json(); document.getElementById('newPatientId').innerText = p.id; document.getElementById('successBox').style.display = 'block'; document.getElementById('patientId').value = p.id; document.getElementById('patientForm').reset(); showToast('✅ Пацієнта створено!'); }
+        else showToast('❌ Помилка', 'danger');
+    };
+</script>
+<style>.slot-btn { width: 80px; margin-bottom: 5px; }</style>
+{% endblock %}
