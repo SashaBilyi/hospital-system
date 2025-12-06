@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>👨‍⚕️ Кабінет Лікаря</h2>
+    <div class="d-flex align-items-center gap-3">
+        <div class="input-group"><input type="number" id="searchPatId" class="form-control" placeholder="ID Пацієнта"><button class="btn btn-info text-white" onclick="searchHistoryById()">🔍</button></div>
+        <div class="d-flex align-items-center"><label class="me-2 text-nowrap">Ви увійшли як:</label><select id="currentDoctor" class="form-select w-auto" onchange="loadDashboard()"></select></div>
+    </div>
+</div>
+
+<ul class="nav nav-tabs mb-4" id="doctorTabs" role="tablist">
+    <li class="nav-item"><button class="nav-link active fw-bold" id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" type="button">📅 Мій Розклад</button></li>
+    <li class="nav-item"><button class="nav-link fw-bold" id="patients-tab" data-bs-toggle="tab" data-bs-target="#patients" type="button" onclick="loadAllPatients()">👥 Реєстр Пацієнтів</button></li>
+</ul>
+
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="dashboard">
+        <div class="row">
+            <div class="col-md-7">
+                <div class="card shadow mb-4">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center"><span>Заплановані візити</span><div><button class="btn btn-sm btn-outline-light me-1" onclick="clearCompleted()">🧹 Приховати завершені</button><button class="btn btn-sm btn-light" onclick="loadAppointments()">🔄</button></div></div>
+                    <div class="card-body"><div id="appointmentsList" class="list-group"></div></div>
+                </div>
+                <div class="card shadow"><div class="card-header bg-secondary text-white">📊 Аналітика (За доходом)</div><div class="card-body"><table class="table table-sm table-hover"><thead><tr><th>Лікар</th><th>Візитів</th><th>Дохід</th></tr></thead><tbody id="analyticsTable"></tbody></table></div></div>
+            </div>
+            <div class="col-md-5">
+                <div class="card shadow border-warning sticky-top" style="top: 20px;">
+                    <div class="card-header bg-warning">📝 Дії з візитом</div>
+                    <div class="card-body">
+                        <div class="alert alert-info py-2" id="selectedPatientInfo">Оберіть візит зі списку</div>
+                        <div id="symptomsBox" class="mb-3 p-2 bg-light border rounded" style="display:none;"><small class="text-muted fw-bold">Скарги пацієнта:</small><p class="mb-0 fst-italic" id="patSymptoms">...</p></div>
+                        <div id="actionButtons" style="display:none;" class="d-grid gap-2">
+                            <button class="btn btn-success" onclick="showCompleteForm()">✅ Провести прийом</button>
+                            <div class="btn-group"><button class="btn btn-secondary w-50" onclick="showEditApptModal()">✏️ Змінити</button><button class="btn btn-danger w-50" onclick="cancelAppt()">❌ Скасувати</button></div>
+                        </div>
+                        <form id="completeForm" style="display: none;" class="mt-3 border-top pt-3">
+                            <input type="hidden" id="apptId"><input type="hidden" id="patId">
+                            <div class="mb-2"><label>Діагноз:</label><textarea class="form-control" id="diag" rows="2" required></textarea></div>
+                            <div class="mb-3 p-2 border rounded bg-light"><label class="fw-bold mb-1">Рецепт:</label><input type="text" class="form-control mb-1" id="medName" placeholder="Назва ліків" required><div class="row g-1"><div class="col-6"><input type="text" class="form-control form-control-sm" id="medDosage" placeholder="Доза"></div><div class="col-6"><input type="text" class="form-control form-control-sm" id="medInstr" placeholder="Інструкція"></div></div></div>
+                            <button type="submit" class="btn btn-success w-100">Зберегти</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="tab-pane fade" id="patients">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">Список всіх пацієнтів</div>
+            <div class="card-body">
+                <div class="input-group mb-3"><span class="input-group-text">🔍</span><input type="text" id="patientSearchInput" class="form-control" placeholder="Пошук..." onkeyup="if(event.key === 'Enter') loadAllPatients()"><button class="btn btn-primary" type="button" onclick="loadAllPatients()">Знайти</button><button class="btn btn-outline-secondary" type="button" onclick="resetSearch()">Скинути</button></div>
+                <table class="table table-hover align-middle"><thead class="table-light"><tr><th>ID</th><th>ПІБ</th><th>Дата нар.</th><th>Телефон</th><th>Дії</th></tr></thead><tbody id="patientsTableBody"></tbody></table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="historyModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header bg-info text-white"><h5 class="modal-title">Історія Хвороб</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><table class="table table-striped"><thead><tr><th>Дата</th><th>Лікар</th><th>Діагноз</th></tr></thead><tbody id="historyBody"></tbody></table></div></div></div></div>
+<div class="modal fade" id="editPatientModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-primary text-white"><h5 class="modal-title">Редагування Пацієнта</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="editPatientForm"><input type="hidden" id="editPatId"><div class="mb-2"><label>Ім'я:</label><input type="text" class="form-control" id="editName" required></div><div class="mb-2"><label>Прізвище:</label><input type="text" class="form-control" id="editLast" required></div><div class="mb-2"><label>Телефон:</label><input type="text" class="form-control" id="editPhone" required></div><button type="submit" class="btn btn-primary w-100 mt-3">Зберегти зміни</button></form></div></div></div></div>
+<div class="modal fade" id="editApptModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-secondary text-white"><h5 class="modal-title">Зміна запису</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="editApptForm"><div class="mb-2"><label>Новий час:</label><input type="datetime-local" class="form-control" id="editApptDate"></div><div class="mb-2"><label>Скарги:</label><textarea class="form-control" id="editApptSymp"></textarea></div><button type="submit" class="btn btn-success w-100 mt-3">Зберегти</button></form></div></div></div></div>
+<div class="modal fade" id="deletePatientModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header bg-danger text-white"><h5 class="modal-title">⚠️ Видалення Пацієнта</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body text-center"><p class="fs-5">Видалити цього пацієнта?</p><p class="text-muted small">Всі його заплановані візити будуть скасовані.</p></div><div class="modal-footer justify-content-center"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Ні</button><button type="button" class="btn btn-danger" onclick="confirmDeletePatient()">Так, видалити</button></div></div></div></div>
+
+<script>
+    let currentDoctorId = null; let selectedAppt = null; let patientIdToDelete = null; let currentApptsData = [];
+
+    async function init() {
+        const res = await fetch('/doctors/');
+        const doctors = await res.json();
+        const select = document.getElementById('currentDoctor');
+        doctors.forEach(doc => { const opt = document.createElement('option'); opt.value = doc.id; opt.text = `${doc.first_name} ${doc.last_name}`; select.appendChild(opt); });
+        loadDashboard();
+    }
+    
+    function loadDashboard() { currentDoctorId = document.getElementById('currentDoctor').value; loadAppointments(); loadAnalytics(); resetRightPanel(); }
+    function resetRightPanel() { document.getElementById('completeForm').style.display = 'none'; document.getElementById('actionButtons').style.display = 'none'; document.getElementById('symptomsBox').style.display = 'none'; document.getElementById('selectedPatientInfo').innerText = "Оберіть візит зі списку"; document.getElementById('selectedPatientInfo').className = "alert alert-info py-2"; }
+
+    async function loadAppointments() {
+        if (!currentDoctorId) return;
+        const res = await fetch(`/doctors/${currentDoctorId}/appointments`);
+        currentApptsData = await res.json();
+        renderAppointments(currentApptsData);
+    }
+    function renderAppointments(appts) {
+        const list = document.getElementById('appointmentsList'); list.innerHTML = '';
+        if (appts.length === 0) { list.innerHTML = '<div class="list-group-item">Пусто</div>'; return; }
+        appts.forEach((appt) => {
+            let statusBadge = appt.status === 'completed' ? '<span class="badge bg-secondary">Завершено</span>' : '<span class="badge bg-success">Заплановано</span>';
+            let sympSafe = (appt.symptoms || "").replace(/"/g, "&quot;");
+            let clickAction = appt.status === 'scheduled' ? `onclick='selectAppointment(${appt.id})'` : '';
+            list.innerHTML += `<div class="list-group-item list-group-item-action cursor-pointer d-flex justify-content-between" ${clickAction}><div><h5 class="mb-1">${new Date(appt.date_time).toLocaleDateString()} ${new Date(appt.date_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</h5><p class="mb-0">${appt.patient.first_name} ${appt.patient.last_name}</p></div>${statusBadge}</div>`;
+        });
+    }
+    function clearCompleted() { const filtered = currentApptsData.filter(a => a.status !== 'completed'); renderAppointments(filtered); showToast('Завершені приховано', 'info'); }
+    window.selectAppointment = function(id) {
+        selectedAppt = currentApptsData.find(a => a.id === id);
+        document.getElementById('apptId').value = selectedAppt.id;
+        document.getElementById('patId').value = selectedAppt.patient.id;
+        document.getElementById('selectedPatientInfo').innerHTML = `<strong>${selectedAppt.patient.first_name} ${selectedAppt.patient.last_name}</strong>`;
+        document.getElementById('selectedPatientInfo').className = "alert alert-warning py-2";
+        document.getElementById('patSymptoms').innerText = selectedAppt.symptoms || "Не вказано";
+        document.getElementById('symptomsBox').style.display = 'block';
+        document.getElementById('actionButtons').style.display = 'grid';
+        document.getElementById('completeForm').style.display = 'none';
+    }
+    function showCompleteForm() { document.getElementById('completeForm').style.display = 'block'; }
+    function showEditApptModal() { document.getElementById('editApptDate').value = selectedAppt.date_time.slice(0, 16); document.getElementById('editApptSymp').value = selectedAppt.symptoms || ""; new bootstrap.Modal(document.getElementById('editApptModal')).show(); }
+    window.cancelAppt = async function() { if(!confirm("Скасувати?")) return; const res = await fetch(`/appointments/${selectedAppt.id}/cancel`, { method: 'POST' }); if (res.ok) { showToast('❌ Запис скасовано'); loadDashboard(); } else showToast('Помилка', 'danger'); }
+    document.getElementById('editApptForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const data = { date_time: document.getElementById('editApptDate').value, symptoms: document.getElementById('editApptSymp').value };
+        const res = await fetch(`/appointments/${selectedAppt.id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+        if (res.ok) { showToast('Зміни збережено!'); bootstrap.Modal.getInstance(document.getElementById('editApptModal')).hide(); loadAppointments(); resetRightPanel(); } else { const err = await res.json(); showToast('Помилка: ' + err.detail, 'danger'); }
+    }
+    
+    document.getElementById('completeForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const data = {
+            diagnosis: document.getElementById('diag').value,
+            treatment_plan: "Standard",
+            prescriptions: [{
+                medication_name: document.getElementById('medName').value,
+                dosage: document.getElementById('medDosage').value,
+                instructions: document.getElementById('medInstr').value
+            }]
+        };
+        const res = await fetch(`/appointments/${document.getElementById('apptId').value}/complete`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+        if (res.ok) { 
+            showToast('✅ Готово!'); loadDashboard(); 
+        } else {
+            const err = await res.json();
+            showToast('❌ Помилка: ' + (err.detail || JSON.stringify(err)), 'danger');
+        }
+    };
+
+    async function loadAllPatients() { const search = document.getElementById('patientSearchInput')?.value || ''; const res = await fetch(`/patients/?search=${encodeURIComponent(search)}`); const patients = await res.json(); const tbody = document.getElementById('patientsTableBody'); tbody.innerHTML = ''; patients.forEach(p => { tbody.innerHTML += `<tr><td><b>${p.id}</b></td><td>${p.first_name} ${p.last_name}</td><td>${p.date_of_birth}</td><td>${p.phone_number}</td><td><button class="btn btn-sm btn-outline-info" onclick="showHistory(${p.id})">📜</button> <button class="btn btn-sm btn-outline-warning" onclick='openEditPatient(${JSON.stringify(p)})'>✏️</button> <button class="btn btn-sm btn-outline-danger" onclick="askDeletePatient(${p.id})">🗑️</button></td></tr>`; }); }
+    function resetSearch() { document.getElementById('patientSearchInput').value = ''; loadAllPatients(); }
+    window.openEditPatient = function(p) { document.getElementById('editPatId').value = p.id; document.getElementById('editName').value = p.first_name; document.getElementById('editLast').value = p.last_name; document.getElementById('editPhone').value = p.phone_number; new bootstrap.Modal(document.getElementById('editPatientModal')).show(); }
+    document.getElementById('editPatientForm').onsubmit = async (e) => { e.preventDefault(); const id = document.getElementById('editPatId').value; const data = { first_name: document.getElementById('editName').value, last_name: document.getElementById('editLast').value, phone_number: document.getElementById('editPhone').value }; const res = await fetch(`/patients/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); if (res.ok) { showToast('Дані оновлено!'); bootstrap.Modal.getInstance(document.getElementById('editPatientModal')).hide(); loadAllPatients(); } else showToast('Помилка оновлення', 'danger'); }
+    window.askDeletePatient = function(id) { patientIdToDelete = id; new bootstrap.Modal(document.getElementById('deletePatientModal')).show(); }
+    window.confirmDeletePatient = async function() { if (!patientIdToDelete) return; const res = await fetch(`/patients/${patientIdToDelete}`, { method: 'DELETE' }); bootstrap.Modal.getInstance(document.getElementById('deletePatientModal')).hide(); if (res.ok) { showToast('Пацієнта видалено'); loadAllPatients(); loadAppointments(); } else showToast('Помилка видалення', 'danger'); }
+    window.searchHistoryById = function() { const id = document.getElementById('searchPatId').value; if(id) showHistory(id); }
+    window.showHistory = async function(patId) { const res = await fetch(`/patients/${patId}/history`); const hist = await res.json(); const body = document.getElementById('historyBody'); body.innerHTML = ''; if(hist.length === 0) body.innerHTML = '<tr><td colspan="3" class="text-center">Історія порожня</td></tr>'; hist.forEach(h => body.innerHTML += `<tr><td>${new Date(h.date).toLocaleDateString()}</td><td>${h.doctor_name}</td><td>${h.diagnosis}</td></tr>`); new bootstrap.Modal(document.getElementById('historyModal')).show(); }
+    async function loadAnalytics() { const res = await fetch('/analytics/doctors'); const data = await res.json(); document.getElementById('analyticsTable').innerHTML = data.map(r => `<tr><td>${r.last_name}</td><td>${r.total_visits}</td><td>${r.total_revenue}</td></tr>`).join(''); }
+    init();
+</script>
+{% endblock %}
