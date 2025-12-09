@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4"><h2>🏥 Керування Персоналом</h2><button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addDoctorModal" onclick="loadDepartments()">➕ Додати Лікаря</button></div>
+<div class="card shadow"><div class="card-body"><table class="table table-hover align-middle"><thead class="table-dark"><tr><th>ID</th><th>ПІБ</th><th>Спеціалізація</th><th>Ціна візиту</th><th>Статус (Робота)</th><th>Дії</th></tr></thead><tbody id="doctorsTableBody"></tbody></table></div></div>
+
+<div class="modal fade" id="addDoctorModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-success text-white"><h5 class="modal-title">Новий Лікар</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="addDoctorForm"><div class="row mb-2"><div class="col"><input type="text" class="form-control" id="newFirst" placeholder="Ім'я" required></div><div class="col"><input type="text" class="form-control" id="newLast" placeholder="Прізвище" required></div></div><input type="text" class="form-control mb-2" id="newSpec" placeholder="Спеціалізація" required><input type="number" class="form-control mb-2" id="newPrice" placeholder="Ціна (грн)" required><div class="mb-3"><label class="form-label fw-bold">Департамент:</label><select class="form-select" id="newDept" required><option value="" disabled selected>Оберіть...</option></select></div><div class="border p-2 rounded bg-light mb-3"><label class="form-label fw-bold mb-1">Графік (Пн-Пт):</label><div class="input-group"><span class="input-group-text">З</span><input type="time" class="form-control" id="schedStart" value="09:00"><span class="input-group-text">До</span><input type="time" class="form-control" id="schedEnd" value="17:00"></div></div><button type="submit" class="btn btn-success w-100">Створити</button></form></div></div></div></div>
+<div class="modal fade" id="editDoctorModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-warning"><h5 class="modal-title">Редагування</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="editDoctorForm"><input type="hidden" id="editDocId"><div class="mb-2"><label>Ім'я:</label><input type="text" class="form-control" id="editFirst"></div><div class="mb-2"><label>Прізвище:</label><input type="text" class="form-control" id="editLast"></div><div class="mb-2"><label>Спеціалізація:</label><input type="text" class="form-control" id="editSpec"></div><div class="mb-2"><label>Ціна візиту:</label><input type="number" class="form-control" id="editPrice"></div><button type="submit" class="btn btn-warning w-100 mt-3">Зберегти</button></form></div></div></div></div>
+<div class="modal fade" id="scheduleModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header bg-info text-white"><h5 class="modal-title">Графік Роботи</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="scheduleForm"><input type="hidden" id="schedDocId"><table class="table table-sm"><thead><tr><th>День</th><th>Початок</th><th>Кінець</th></tr></thead><tbody id="schedBody"></tbody></table><button type="submit" class="btn btn-info w-100 text-white fw-bold">Оновити Розклад</button></form></div></div></div></div>
+
+<script>
+    async function loadDoctors() {
+        const res = await fetch('/doctors/');
+        const docs = await res.json();
+        const tbody = document.getElementById('doctorsTableBody');
+        tbody.innerHTML = '';
+        docs.forEach(d => {
+            let selectClass = 'form-select-sm ';
+            if (d.availability_status === 'Available') selectClass += 'border-success text-success';
+            else if (d.availability_status === 'Fired') selectClass += 'border-danger text-danger bg-light';
+            else selectClass += 'border-warning text-dark';
+            tbody.innerHTML += `<tr><td>${d.id}</td><td>${d.first_name} ${d.last_name}</td><td>${d.specialization}</td><td>${d.price_per_visit} грн</td><td><select class="form-select ${selectClass}" onchange="changeStatus(${d.id}, this.value)"><option value="Available" ${d.availability_status === 'Available' ? 'selected' : ''}>🟢 Працює</option><option value="Sick Leave" ${d.availability_status === 'Sick Leave' ? 'selected' : ''}>🤒 Лікарняний</option><option value="Vacation" ${d.availability_status === 'Vacation' ? 'selected' : ''}>🏖️ Відпустка</option><option value="Fired" ${d.availability_status === 'Fired' ? 'selected' : ''}>🔴 Звільнений</option></select></td><td><button class="btn btn-sm btn-outline-warning" onclick='openEdit(${JSON.stringify(d)})'>✏️</button> <button class="btn btn-sm btn-outline-info" onclick="openSchedule(${d.id})">📅</button></td></tr>`;
+        });
+    }
+    async function changeStatus(id, newStatus) {
+        const res = await fetch(`/doctors/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ availability_status: newStatus }) });
+        if (res.ok) { showToast(`Статус змінено!`); loadDoctors(); } else showToast('Помилка', 'danger');
+    }
+    async function loadDepartments() {
+        const select = document.getElementById('newDept');
+        if (select.options.length > 1) return;
+        const res = await fetch('/departments/');
+        const depts = await res.json();
+        select.innerHTML = '<option value="" disabled selected>Оберіть...</option>';
+        depts.forEach(d => { const opt = document.createElement('option'); opt.value = d.id; opt.text = `${d.name} (${d.location})`; select.appendChild(opt); });
+    }
+    document.getElementById('addDoctorForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const data = { first_name: document.getElementById('newFirst').value, last_name: document.getElementById('newLast').value, specialization: document.getElementById('newSpec').value, department_id: document.getElementById('newDept').value, price_per_visit: document.getElementById('newPrice').value, schedule_start: document.getElementById('schedStart').value, schedule_end: document.getElementById('schedEnd').value };
+        const res = await fetch('/doctors/', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+        if (res.ok) { showToast('✅ Лікаря додано!'); bootstrap.Modal.getInstance(document.getElementById('addDoctorModal')).hide(); loadDoctors(); } else showToast('❌ Помилка', 'danger');
+    }
+    window.openEdit = function(d) { document.getElementById('editDocId').value = d.id; document.getElementById('editFirst').value = d.first_name; document.getElementById('editLast').value = d.last_name; document.getElementById('editPrice').value = d.price_per_visit; document.getElementById('editSpec').value = d.specialization; new bootstrap.Modal(document.getElementById('editDoctorModal')).show(); }
+    document.getElementById('editDoctorForm').onsubmit = async (e) => { e.preventDefault(); const id = document.getElementById('editDocId').value; const data = { first_name: document.getElementById('editFirst').value, last_name: document.getElementById('editLast').value, specialization: document.getElementById('editSpec').value, price_per_visit: document.getElementById('editPrice').value }; const res = await fetch(`/doctors/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); if (res.ok) { showToast('✅ Оновлено!'); bootstrap.Modal.getInstance(document.getElementById('editDoctorModal')).hide(); loadDoctors(); } else showToast('❌ Помилка', 'danger'); }
+    const daysList = ["Понеділок", "Вівторок", "Середа", "Четвер", "П'ятниця", "Субота", "Неділя"];
+    window.openSchedule = async function(docId) {
+        document.getElementById('schedDocId').value = docId;
+        const res = await fetch(`/doctors/${docId}/schedule`);
+        const schedule = await res.json();
+        const tbody = document.getElementById('schedBody');
+        tbody.innerHTML = '';
+        daysList.forEach(day => {
+            const existing = schedule.find(s => s.day_of_week === day);
+            const startVal = existing ? existing.start_time.slice(0, 5) : "09:00";
+            const endVal = existing ? existing.end_time.slice(0, 5) : "17:00";
+            tbody.innerHTML += `<tr><td>${day}</td><td><input type="time" class="form-control form-control-sm sched-start" data-day="${day}" value="${startVal}"></td><td><input type="time" class="form-control form-control-sm sched-end" data-day="${day}" value="${endVal}"></td></tr>`;
+        });
+        new bootstrap.Modal(document.getElementById('scheduleModal')).show();
+    }
+    document.getElementById('scheduleForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const docId = document.getElementById('schedDocId').value;
+        const schedules = [];
+        daysList.forEach(day => {
+            const start = document.querySelector(`.sched-start[data-day="${day}"]`).value;
+            const end = document.querySelector(`.sched-end[data-day="${day}"]`).value;
+            schedules.push({ day_of_week: day, start_time: start, end_time: end });
+        });
+        const res = await fetch(`/doctors/${docId}/schedule`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ schedules: schedules }) });
+        if (res.ok) { showToast('✅ Розклад оновлено!'); bootstrap.Modal.getInstance(document.getElementById('scheduleModal')).hide(); } else showToast('❌ Помилка', 'danger');
+    }
+    loadDoctors();
+</script>
+{% endblock %}
