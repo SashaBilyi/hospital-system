@@ -40,4 +40,17 @@
    ```bash
    git clone <ваше-посилання>
    cd hospital-system
-   
+
+2. **Запустіть контейнери:**
+   ```bash
+   docker-compose up -d --build
+
+3. **Відкрийте посилання:**
+   ```bash
+   http://127.0.0.1:8000/
+
+## Як запустити тести
+
+1. **Виконайте команду**
+   ```bash
+   docker-compose exec web pytest
