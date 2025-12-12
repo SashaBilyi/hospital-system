@@ -38,7 +38,7 @@
 
 1. **Клонуйте репозиторій:**
    ```bash
-   git clone <ваше-посилання>
+   git clone https://github.com/SashaBilyi/hospital-system.git
    cd hospital-system
 
 2. **Запустіть контейнери:**
